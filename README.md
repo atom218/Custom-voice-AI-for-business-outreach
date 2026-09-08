@@ -6,8 +6,6 @@ loop — speech-in → understanding → reasoning → speech-out — and is wir
 can start **free and local** today, then scale to real phone calls by changing
 environment variables, not code.
 
-> **No UI (yet), by design.** You test it by talking to it in your browser
-> (WebRTC) or over a real phone (Twilio). A frontend can come later.
 
 ---
 
