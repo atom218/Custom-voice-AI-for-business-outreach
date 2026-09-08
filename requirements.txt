@@ -1,0 +1,23 @@
+# ─── Voice AI Reachout — dependencies ────────────────────────────────────────
+# Pinned for reproducibility. The extras below pull exactly the providers this
+# stack uses; add/remove extras when you swap providers (see reachout/services.py).
+#
+#   silero      -> Silero VAD (turn detection base)          [onnxruntime]
+#   groq        -> Groq STT (Whisper) + Groq LLM (Llama)     [groq sdk]
+#   openrouter  -> OpenRouter LLM failover
+#   kokoro      -> Kokoro TTS (local, auto-downloads model)  [kokoro-onnx]
+#   piper       -> Piper TTS (CPU fallback, auto-downloads)
+#   webrtc      -> SmallWebRTC transport for LOCAL testing   [aiortc]
+#   websocket   -> FastAPI websocket transport for TELEPHONY [fastapi/uvicorn]
+pipecat-ai[silero,groq,openrouter,kokoro,piper,webrtc,websocket]==1.7.0
+
+# Prebuilt browser client that the Pipecat 1.7+ dev runner serves at /client
+# (replaces the EOL pipecat-ai-small-webrtc-prebuilt package).
+pipecat-ai-prebuilt>=1.0.5
+
+# Configuration, logging, telephony origination, HTTP
+pydantic-settings>=2.4
+python-dotenv>=1.0
+loguru>=0.7
+twilio>=9.0        # only used by outbound_call.py (phase-2 telephony)
+aiohttp>=3.10

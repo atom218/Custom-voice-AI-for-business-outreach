@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voice AI Reachout</title>
+<style>
+  :root {
+    --bg: #f6f7fb;          --panel: #ffffff;      --panel-2: #f0f2f8;
+    --text: #10131a;        --muted: #667085;      --border: #e6e8ef;
+    --accent: #5b6cff;      --accent-2: #8a5bff;   --accent-soft: #eef0ff;
+    --user-bubble: #eef0ff; --user-text: #22314f;
+    --bot-bubble: #ffffff;  --bot-text: #1a1f2b;
+    --ok: #12b76a;          --warn: #f79009;       --err: #f04438;
+    --shadow: 0 10px 40px rgba(20,25,50,.08);
+  }
+  html[data-theme="dark"] {
+    --bg: #0c0e14;          --panel: #14171f;      --panel-2: #1b1f2a;
+    --text: #eef1f8;        --muted: #98a2b3;      --border: #242835;
+    --accent: #7c8bff;      --accent-2: #a884ff;   --accent-soft: #1c2030;
+    --user-bubble: #232a45; --user-text: #dbe2ff;
+    --bot-bubble: #1b1f2a;  --bot-text: #eef1f8;
+    --shadow: 0 10px 40px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    height: 100vh; display: flex; flex-direction: column;
+    transition: background .3s, color .3s;
+  }
+  /* ---- Header ---- */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 22px; border-bottom: 1px solid var(--border); background: var(--panel);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 650; font-size: 16px; }
+  .logo {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center; color: #fff; font-size: 16px;
+  }
+  .brand small { display:block; color: var(--muted); font-weight: 500; font-size: 11.5px; margin-top:1px;}
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .status-pill {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);
+    background: var(--panel-2); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 999px;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); transition: background .3s; }
+  .dot.connected { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
+  .dot.connecting { background: var(--warn); animation: pulse 1s infinite; }
+  .dot.error { background: var(--err); }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); cursor: pointer; font-size: 17px;
+    display: grid; place-items: center; transition: transform .1s, background .2s, border .2s;
+  }
+  .icon-btn:hover { border-color: var(--accent); }
+  .icon-btn:active { transform: scale(.94); }
+  .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ---- Tooltip ---- */
+  [data-tip] { position: relative; }
+  [data-tip]::after {
+    content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%) translateY(4px); white-space: nowrap;
+    background: var(--text); color: var(--bg); font-size: 12px; font-weight: 500;
+    padding: 6px 9px; border-radius: 7px; opacity: 0; pointer-events: none;
+    transition: opacity .15s, transform .15s; z-index: 50;
+  }
+  [data-tip]:hover::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---- Main ---- */
+  main { flex: 1; display: grid; grid-template-columns: 1fr 420px; min-height: 0; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } .transcript-pane { display:none; } }
+
+  .stage {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 30px; padding: 24px; position: relative;
+  }
+  /* Reactive AI orb */
+  .orb-wrap { position: relative; width: 260px; height: 260px; display: grid; place-items: center; }
+  .orb {
+    width: 150px; height: 150px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--accent-2), var(--accent) 70%);
+    box-shadow: 0 20px 60px color-mix(in srgb, var(--accent) 45%, transparent);
+    transition: transform .12s ease-out; will-change: transform;
+  }
+  .orb-ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    opacity: 0; transform: scale(.6);
+  }
+  .stage.listening .orb-ring { animation: ripple 1.6s ease-out infinite; }
+  @keyframes ripple { 0% { opacity:.7; transform: scale(.55);} 100% { opacity:0; transform: scale(1.05);} }
+  .stage.thinking .orb { animation: think 1.1s ease-in-out infinite; }
+  @keyframes think { 50% { transform: scale(.9); filter: brightness(1.15);} }
+
+  .state-label { font-size: 15px; color: var(--muted); height: 20px; letter-spacing:.2px; }
+  .state-label b { color: var(--text); font-weight: 600; }
+
+  .controls { display: flex; align-items: center; gap: 14px; }
+  .btn-primary {
+    display: flex; align-items: center; gap: 10px; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff;
+    font-size: 16px; font-weight: 600; padding: 15px 30px; border-radius: 14px;
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent);
+    transition: transform .1s, filter .2s;
+  }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .btn-primary:active { transform: scale(.97); }
+  .btn-primary.end { background: linear-gradient(135deg, #f04438, #d92d20);
+    box-shadow: 0 8px 24px rgba(240,68,56,.35); }
+
+  .mic-meter { width: 4px; height: 26px; border-radius: 3px; background: var(--border); overflow: hidden; position: relative; }
+  .mic-meter i { position:absolute; bottom:0; left:0; right:0; background: var(--ok); height: 0%; transition: height .08s; }
+
+  .hint { color: var(--muted); font-size: 13px; max-width: 340px; text-align: center; line-height: 1.5; }
+
+  /* ---- Transcript ---- */
+  .transcript-pane { border-left: 1px solid var(--border); background: var(--panel);
+    display: flex; flex-direction: column; min-height: 0; }
+  .tp-head { padding: 16px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px;
+    display:flex; align-items:center; justify-content: space-between; }
+  .tp-head span.sub { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .messages { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .messages:empty::before { content: "The conversation transcript will appear here once you start talking.";
+    color: var(--muted); font-size: 13.5px; margin: auto; text-align:center; max-width: 260px; line-height:1.5; }
+  .msg { max-width: 85%; padding: 11px 14px; border-radius: 14px; font-size: 14.5px; line-height: 1.45; }
+  .msg .who { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; opacity: .6; margin-bottom: 3px; }
+  .msg.user { align-self: flex-end; background: var(--user-bubble); color: var(--user-text); border-bottom-right-radius: 4px; }
+  .msg.bot  { align-self: flex-start; background: var(--bot-bubble); color: var(--bot-text);
+    border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg.partial { opacity: .6; }
+
+  /* ---- Debug (collapsed) ---- */
+  .debug { border-top: 1px solid var(--border); font-size: 12px; }
+  .debug summary { padding: 10px 20px; cursor: pointer; color: var(--muted); user-select: none; }
+  .debug .log { max-height: 120px; overflow-y: auto; padding: 0 20px 12px;
+    font-family: ui-monospace, Menlo, monospace; color: var(--muted); }
+  .debug .log div { padding: 2px 0; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">◕</div>
+      <div>Voice AI Reachout<small id="agentLabel">Local test console</small></div>
+    </div>
+    <div class="header-right">
+      <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">Not connected</span></div>
+      <button class="icon-btn" id="muteBtn" data-tip="Mute microphone" title="Mute microphone" disabled>🎙️</button>
+      <button class="icon-btn" id="themeBtn" data-tip="Toggle dark mode" title="Toggle dark mode">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="stage" id="stage">
+      <div class="orb-wrap">
+        <div class="orb-ring"></div>
+        <div class="orb" id="orb"></div>
+      </div>
+      <div class="state-label" id="stateLabel">Ready when you are</div>
+      <div class="controls">
+        <button class="btn-primary" id="callBtn">
+          <span id="callIcon">▶</span><span id="callText">Start conversation</span>
+        </button>
+        <div class="mic-meter" id="micMeter" data-tip="Your mic level"><i></i></div>
+      </div>
+      <p class="hint" id="hint">Click start, allow microphone access, and just talk — the agent will greet you first.</p>
+    </section>
+
+    <aside class="transcript-pane">
+      <div class="tp-head">Transcript <span class="sub" id="agentSub"></span></div>
+      <div class="messages" id="messages"></div>
+      <details class="debug">
+        <summary>Developer log</summary>
+        <div class="log" id="log"></div>
+      </details>
+    </aside>
+  </main>
+
+  <audio id="botAudio" autoplay></audio>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "@pipecat-ai/client-js": "https://esm.sh/@pipecat-ai/client-js@1",
+      "@pipecat-ai/small-webrtc-transport": "https://esm.sh/@pipecat-ai/small-webrtc-transport@1?external=@pipecat-ai/client-js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import { PipecatClient } from "@pipecat-ai/client-js";
+    import { SmallWebRTCTransport } from "@pipecat-ai/small-webrtc-transport";
+
+    const $ = (id) => document.getElementById(id);
+    const stage = $("stage"), orb = $("orb"), botAudio = $("botAudio");
+    const messages = $("messages"), logEl = $("log");
+    let client = null, connected = false, muted = false;
+    let curUserEl = null, curBotEl = null;
+
+    // ---------- Theme ----------
+    const savedTheme = localStorage.getItem("theme")
+      || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", savedTheme);
+    $("themeBtn").textContent = savedTheme === "dark" ? "☀️" : "🌙";
+    $("themeBtn").onclick = () => {
+      const t = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", t);
+      localStorage.setItem("theme", t);
+      $("themeBtn").textContent = t === "dark" ? "☀️" : "🌙";
+    };
+
+    // ---------- Helpers ----------
+    const log = (m) => { const d=document.createElement("div"); d.textContent=`${new Date().toLocaleTimeString()}  ${m}`; logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; };
+    const setStatus = (cls, text) => { $("statusDot").className = "dot " + cls; $("statusText").textContent = text; };
+    const setState = (cls, label) => { stage.className = "stage " + cls; $("stateLabel").innerHTML = label; };
+
+    function addMessage(who, text, partial=false) {
+      const el = document.createElement("div");
+      el.className = `msg ${who}` + (partial ? " partial" : "");
+      el.innerHTML = `<div class="who">${who === "user" ? "You" : "Agent"}</div><div class="txt"></div>`;
+      el.querySelector(".txt").textContent = text;
+      messages.appendChild(el);
+      messages.scrollTop = messages.scrollHeight;
+      return el;
+    }
+
+    // ---------- Audio-reactive orb ----------
+    function driveOrb(stream) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+        src.connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        (function loop() {
+          analyser.getByteFrequencyData(data);
+          const vol = data.reduce((a,b)=>a+b,0) / data.length / 255;
+          orb.style.transform = `scale(${1 + vol * 0.9})`;
+          if (connected) requestAnimationFrame(loop);
+          else orb.style.transform = "scale(1)";
+        })();
+      } catch (e) { log("orb audio ctx error: " + e.message); }
+    }
+    function driveMic(stream) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+        ctx.createMediaStreamSource(stream).connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        const bar = $("micMeter").querySelector("i");
+        (function loop() {
+          analyser.getByteFrequencyData(data);
+          const vol = data.reduce((a,b)=>a+b,0) / data.length / 255;
+          bar.style.height = Math.min(100, vol * 220) + "%";
+          if (connected) requestAnimationFrame(loop); else bar.style.height = "0%";
+        })();
+      } catch (e) {}
+    }
+
+    // ---------- Connect / disconnect ----------
+    async function start() {
+      setStatus("connecting", "Connecting…");
+      setState("thinking", "Connecting…");
+      $("callBtn").disabled = true;
+
+      client = new PipecatClient({
+        transport: new SmallWebRTCTransport(),
+        enableMic: true,
+        enableCam: false,
+        callbacks: {
+          onTransportStateChanged: (s) => log("transport: " + s),
+          onBotConnected: () => { connected = true; setStatus("connected","Connected"); setState("listening","<b>Listening…</b>"); $("muteBtn").disabled=false; },
+          onBotDisconnected: () => stop(),
+          onUserStartedSpeaking: () => setState("listening", "<b>Listening…</b>"),
+          onUserStoppedSpeaking: () => setState("thinking", "Thinking…"),
+          onUserTranscript: (d) => {
+            if (d.final) { addMessage("user", d.text); curUserEl = null; }
+            else { if (!curUserEl) curUserEl = addMessage("user", d.text, true); else curUserEl.querySelector(".txt").textContent = d.text; }
+          },
+          onBotStartedSpeaking: () => { setState("speaking", "<b>Speaking…</b>"); curBotEl = null; },
+          onBotStoppedSpeaking: () => { setState("listening", "<b>Listening…</b>"); curBotEl = null; },
+          onBotOutput: (d) => {
+            const t = (d && d.text) ? d.text : "";
+            if (!t) return;
+            if (!curBotEl) curBotEl = addMessage("bot", t);
+            else curBotEl.querySelector(".txt").textContent += (t.startsWith(" ") ? "" : " ") + t;
+            messages.scrollTop = messages.scrollHeight;
+          },
+          onTrackStarted: (track, participant) => {
+            const isLocal = participant && (participant.local || participant.isLocal);
+            if (track.kind !== "audio") return;
+            const stream = new MediaStream([track]);
+            if (isLocal) { driveMic(stream); }
+            else { botAudio.srcObject = stream; botAudio.play().catch(()=>{}); driveOrb(stream); }
+          },
+          onError: (m) => { log("ERROR: " + JSON.stringify(m)); setStatus("error", "Error"); },
+        },
+      });
+
+      try {
+        await client.connect({ connection_url: `${location.origin}/api/offer` });
+        $("callBtn").disabled = false;
+        $("callBtn").classList.add("end");
+        $("callIcon").textContent = "■"; $("callText").textContent = "End conversation";
+        $("hint").style.display = "none";
+      } catch (e) {
+        log("connect failed: " + e.message);
+        setStatus("error", "Connection failed");
+        setState("", "Couldn't connect — is the server running?");
+        $("callBtn").disabled = false;
+      }
+    }
+
+    async function stop() {
+      try { if (client) await client.disconnect(); } catch (e) {}
+      connected = false; client = null; curUserEl = curBotEl = null;
+      setStatus("", "Not connected");
+      setState("", "Ready when you are");
+      orb.style.transform = "scale(1)";
+      $("callBtn").classList.remove("end");
+      $("callIcon").textContent = "▶"; $("callText").textContent = "Start conversation";
+      $("muteBtn").disabled = true; muted = false; $("muteBtn").textContent = "🎙️";
+      $("hint").style.display = "";
+    }
+
+    $("callBtn").onclick = () => (connected ? stop() : start());
+
+    $("muteBtn").onclick = () => {
+      if (!client) return;
+      muted = !muted;
+      try { client.enableMic(!muted); } catch (e) { log("mute error: " + e.message); }
+      $("muteBtn").textContent = muted ? "🔇" : "🎙️";
+      $("muteBtn").setAttribute("data-tip", muted ? "Unmute microphone" : "Mute microphone");
+    };
+
+    setState("", "Ready when you are");
+    log("UI ready.");
+  </script>
+</body>
+</html>
